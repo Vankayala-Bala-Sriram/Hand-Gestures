@@ -1,230 +1,461 @@
-
 <!DOCTYPE html>
-<html lang="en">
+
+<html>
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hand Magic v3 - Kamehameha</title>
-    <style>
-        body { margin:0; overflow:hidden; background:black; font-family:sans-serif; }
-        video, canvas { position:absolute; top:0; left:0; width: 100vw; height: 100vh; object-fit: cover; }
-        #ui { position:fixed; top:10px; left:10px; color:white; z-index:10; text-shadow: 1px 1px 2px black; }
-        button { margin:2px; padding:8px; cursor:pointer; background: rgba(255,255,255,0.2); color: white; border: 1px solid white; border-radius: 4px; }
-        button:hover { background: rgba(255,255,255,0.4); }
-        #loading {
-            position:fixed; inset:0; display:flex;
-            align-items:center; justify-content:center;
-            background:black; color:white; font-size:24px;
-            z-index:20;
-        }
-    </style>
+
+<meta charset="UTF-8">
+
+<title>Hand Magic v3 - Kamehameha</title>
+
+<style>
+
+body { margin:0; overflow:hidden; background:black; font-family:sans-serif; }
+
+video, canvas { position:absolute; top:0; left:0; }
+
+#ui { position:fixed; top:10px; left:10px; color:white; z-index:10; }
+
+button { margin:2px; padding:6px; cursor:pointer; }
+
+#loading {
+
+  position:fixed; inset:0; display:flex;
+
+  align-items:center; justify-content:center;
+
+  background:black; color:white; font-size:24px;
+
+  z-index:20;
+
+}
+
+</style>
+
 </head>
+
 
 <body>
 
+
 <div id="loading">Charging Ki...</div>
 
+
 <div id="ui">
-    <div id="status">Hands: 0</div>
-    <div>
-        <button onclick="setTheme('purple')">Purple</button>
-        <button onclick="setTheme('gold')">Gold</button>
-        <button onclick="setTheme('cyan')">Cyan</button>
-        <button onclick="setTheme('rainbow')">Rainbow</button>
-    </div>
-    <div style="margin-top: 8px;">🤲 Hold hands together → Charge → Push forward 🚀</div>
+
+  <div id="status">Hands: 0</div>
+
+  <div>
+
+    <button onclick="setTheme('purple')">Purple</button>
+
+    <button onclick="setTheme('gold')">Gold</button>
+
+    <button onclick="setTheme('cyan')">Cyan</button>
+
+    <button onclick="setTheme('rainbow')">Rainbow</button>
+
+  </div>
+
+  <div>🤲 Hold hands together → Charge → Push forward 🚀</div>
+
 </div>
 
+
 <video id="video" autoplay playsinline></video>
+
 <canvas id="canvas"></canvas>
 
+
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
+
 <script>
+
+
 const video = document.getElementById('video');
+
 const canvas = document.getElementById('canvas');
+
 const ctx = canvas.getContext('2d');
 
+
 let particles = [];
+
 let handsData = [];
+
 let theme = "cyan";
 
+
 /* -------- KAMEHAMEHA STATE -------- */
+
 let charging = false;
+
 let chargePower = 0;
+
 let beamActive = false;
+
 let beamDir = {x:0,y:0};
 
+
 const themes = {
-    purple:["#fff","#a855f7"],
-    gold:["#fff","#f59e0b"],
-    cyan:["#fff","#06b6d4"]
+
+  purple:["#fff","#a855f7"],
+
+  gold:["#fff","#f59e0b"],
+
+  cyan:["#fff","#06b6d4"]
+
 };
+
 
 function setTheme(t){ theme=t; }
 
+
 function resize(){
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+
+  canvas.width = window.innerWidth;
+
+  canvas.height = window.innerHeight;
+
 }
+
 window.onresize = resize;
+
 resize();
 
-// Request camera access
+
 navigator.mediaDevices.getUserMedia({video:true})
-.then(stream => { video.srcObject = stream; })
-.catch(err => {
-    console.error("Camera Error:", err);
-    document.getElementById("loading").innerText = "Camera Access Denied";
-});
+
+.then(stream=> video.srcObject = stream);
+
 
 function getColor(i=0){
-    if(theme==="rainbow") return `hsl(${i*18},100%,60%)`;
-    return themes[theme][1];
+
+  if(theme==="rainbow") return `hsl(${i*18},100%,60%)`;
+
+  return themes[theme][1];
+
 }
 
-/* -------- VISUAL EFFECTS -------- */
+
+/* -------- BASIC EFFECTS -------- */
+
+
 function drawGlowLine(x1,y1,x2,y2,color){
-    const layers=[
-        {w:40,a:0.03},
-        {w:25,a:0.08},
-        {w:12,a:0.2},
-        {w:4,a:1}
-    ];
-    layers.forEach(l=>{
-        ctx.strokeStyle=color;
-        ctx.globalAlpha=l.a;
-        ctx.lineWidth=l.w;
-        ctx.beginPath();
-        ctx.moveTo(x1,y1);
-        ctx.lineTo(x2,y2);
-        ctx.stroke();
-    });
-    ctx.globalAlpha=1;
+
+  const layers=[
+
+    {w:40,a:0.03},
+
+    {w:25,a:0.08},
+
+    {w:12,a:0.2},
+
+    {w:4,a:1}
+
+  ];
+
+
+  layers.forEach(l=>{
+
+    ctx.strokeStyle=color;
+
+    ctx.globalAlpha=l.a;
+
+    ctx.lineWidth=l.w;
+
+    ctx.beginPath();
+
+    ctx.moveTo(x1,y1);
+
+    ctx.lineTo(x2,y2);
+
+    ctx.stroke();
+
+  });
+
+
+  ctx.globalAlpha=1;
+
 }
+
 
 function drawParticles(){
-    particles.forEach(p=>{
-        p.x+=p.vx;
-        p.y+=p.vy;
-        p.life--;
-        ctx.fillStyle=p.color;
-        ctx.globalAlpha=p.life/40;
-        ctx.beginPath();
-        ctx.arc(p.x,p.y,2,0,Math.PI*2);
-        ctx.fill();
-    });
-    ctx.globalAlpha=1;
-    particles=particles.filter(p=>p.life>0);
-}
 
-function drawEnergyBall(x,y,r){
-    const g=ctx.createRadialGradient(x,y,5,x,y,r);
-    g.addColorStop(0,"white");
-    g.addColorStop(1,getColor());
-    ctx.fillStyle=g;
+  particles.forEach(p=>{
+
+    p.x+=p.vx;
+
+    p.y+=p.vy;
+
+    p.life--;
+
+
+    ctx.fillStyle=p.color;
+
+    ctx.globalAlpha=p.life/40;
+
     ctx.beginPath();
-    ctx.arc(x,y,r,0,Math.PI*2);
+
+    ctx.arc(p.x,p.y,2,0,Math.PI*2);
+
     ctx.fill();
 
-    for(let i=0;i<5;i++){
-        particles.push({
-            x:x+(Math.random()-0.5)*r,
-            y:y+(Math.random()-0.5)*r,
-            vx:(Math.random()-0.5)*4,
-            vy:(Math.random()-0.5)*4,
-            life:30,
-            color:getColor()
-        });
-    }
+  });
+
+
+  ctx.globalAlpha=1;
+
+  particles=particles.filter(p=>p.life>0);
+
 }
+
+
+/* -------- ENERGY BALL -------- */
+
+
+function drawEnergyBall(x,y,r){
+
+  const g=ctx.createRadialGradient(x,y,5,x,y,r);
+
+  g.addColorStop(0,"white");
+
+  g.addColorStop(1,getColor());
+
+
+  ctx.fillStyle=g;
+
+  ctx.beginPath();
+
+  ctx.arc(x,y,r,0,Math.PI*2);
+
+  ctx.fill();
+
+
+  // aura particles
+
+  for(let i=0;i<5;i++){
+
+    particles.push({
+
+      x:x+(Math.random()-0.5)*r,
+
+      y:y+(Math.random()-0.5)*r,
+
+      vx:(Math.random()-0.5)*2,
+
+      vy:(Math.random()-0.5)*2,
+
+      life:30,
+
+      color:getColor()
+
+    });
+
+  }
+
+}
+
+
+/* -------- BEAM -------- */
+
 
 function drawBeam(x,y,dir){
-    const len = 2000;
-    drawGlowLine(x,y, x+dir.x*len, y+dir.y*len, getColor());
+
+  const len = 2000;
+
+
+  drawGlowLine(
+
+    x,y,
+
+    x+dir.x*len,
+
+    y+dir.y*len,
+
+    getColor()
+
+  );
+
 }
 
-/* -------- CORE LOGIC -------- */
+
+/* -------- MAIN DRAW -------- */
+
+
 function draw(results){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    ctx.save();
-    ctx.scale(-1,1);
-    ctx.drawImage(video,-canvas.width,0,canvas.width,canvas.height);
-    ctx.restore();
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    handsData = results.multiHandLandmarks || [];
-    document.getElementById("status").innerText="Hands: "+handsData.length;
 
-    if(handsData.length === 2){
-        const h1 = handsData[0][9];
-        const h2 = handsData[1][9];
+  ctx.save();
 
-        const x1 = (1 - h1.x)*canvas.width; // Mirror adjustment
-        const y1 = h1.y*canvas.height;
-        const x2 = (1 - h2.x)*canvas.width; // Mirror adjustment
-        const y2 = h2.y*canvas.height;
+  ctx.scale(-1,1);
 
-        const midX = (x1+x2)/2;
-        const midY = (y1+y2)/2;
-        const dist = Math.hypot(x1-x2,y1-y2);
+  ctx.drawImage(video,-canvas.width,0,canvas.width,canvas.height);
 
-        if(dist < 180){
-            charging = true;
-            chargePower += 0.02;
-            if(chargePower > 1) chargePower = 1;
-            drawEnergyBall(midX,midY,40 + chargePower*100);
-        } else {
-            if(charging && chargePower > 0.3){
-                beamActive = true;
-                beamDir.x = (midX - canvas.width/2) / (canvas.width/4);
-                beamDir.y = (midY - canvas.height/2) / (canvas.height/4);
-            }
-            charging = false;
-            chargePower *= 0.96;
-        }
+  ctx.restore();
 
-        if(beamActive){
-            drawBeam(midX,midY,beamDir);
-            chargePower -= 0.02;
-            if(chargePower <= 0) beamActive = false;
-        }
+
+  handsData = results.multiHandLandmarks || [];
+
+  document.getElementById("status").innerText="Hands: "+handsData.length;
+
+
+  /* ---- KAMEHAMEHA LOGIC ---- */
+
+
+  if(handsData.length === 2){
+
+
+    const h1 = handsData[0][9];
+
+    const h2 = handsData[1][9];
+
+
+    const x1 = h1.x*canvas.width;
+
+    const y1 = h1.y*canvas.height;
+
+    const x2 = h2.x*canvas.width;
+
+    const y2 = h2.y*canvas.height;
+
+
+    const midX = (x1+x2)/2;
+
+    const midY = (y1+y2)/2;
+
+
+    const dist = Math.hypot(x1-x2,y1-y2);
+
+
+    // Start charging
+
+    if(dist < 150){
+
+      charging = true;
+
+      chargePower += 0.02;
+
+      if(chargePower > 1) chargePower = 1;
+
+
+      drawEnergyBall(midX,midY,50 + chargePower*80);
+
     } else {
-        charging = false;
-        beamActive = false;
-        chargePower *= 0.9;
+
+      // Release beam
+
+      if(charging && chargePower > 0.3){
+
+        beamActive = true;
+
+
+        beamDir.x = (midX - canvas.width/2)/canvas.width;
+
+        beamDir.y = (midY - canvas.height/2)/canvas.height;
+
+      }
+
+
+      charging = false;
+
+      chargePower *= 0.95;
+
     }
-    drawParticles();
+
+
+    // Draw beam
+
+    if(beamActive){
+
+      drawBeam(midX,midY,beamDir);
+
+
+      chargePower -= 0.02;
+
+      if(chargePower <= 0){
+
+        beamActive = false;
+
+      }
+
+    }
+
+
+  } else {
+
+    charging = false;
+
+    beamActive = false;
+
+    chargePower *= 0.9;
+
+  }
+
+
+  drawParticles();
+
 }
 
-/* -------- INITIALIZATION -------- */
+
+/* -------- INIT -------- */
+
+
 const hands = new Hands({
-    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+
+  locateFile: f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+
 });
+
 
 hands.setOptions({
-    maxNumHands: 2,
-    modelComplexity: 1,
-    minDetectionConfidence: 0.7,
-    minTrackingConfidence: 0.5
+
+  maxNumHands:2,
+
+  modelComplexity:1,
+
+  minDetectionConfidence:0.7,
+
+  minTrackingConfidence:0.5
+
 });
+
 
 hands.onResults(draw);
 
-const camera = new Camera(video, {
-    onFrame: async () => {
-        await hands.send({image: video});
-    },
-    width: 1280,
-    height: 720
+
+const camera = new Camera(video,{
+
+  onFrame: async ()=>{
+
+    await hands.send({image:video});
+
+  },
+
+  width:1280,
+
+  height:720
+
 });
 
-camera.start().then(() => {
-    console.log("Camera and Models loaded.");
-    document.getElementById("loading").style.display = "none";
-});
+
+camera.start();
+
+
+setTimeout(()=>{
+
+  document.getElementById("loading").style.display="none";
+
+},2000);
+
 
 </script>
+
 </body>
+
 </html>
